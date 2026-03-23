@@ -1,8 +1,10 @@
-const STORAGE_KEY = "listen-mini-playlist-v1";
+const API_BASE = "https://seedance-v2-0.workers.dev";
+const LIBRARY_ID_KEY = "listen-mini-library-id";
 
+let appData = null;
 let player = null;
 let isPlayerReady = false;
-let currentIndex = -1;
+let currentSongIndex = -1;
 
 const els = {
   youtubeUrl: document.getElementById("youtubeUrl"),
@@ -10,31 +12,84 @@ const els = {
   prevBtn: document.getElementById("prevBtn"),
   playPauseBtn: document.getElementById("playPauseBtn"),
   nextBtn: document.getElementById("nextBtn"),
-  clearBtn: document.getElementById("clearBtn"),
-  playlist: document.getElementById("playlist"),
-  playlistCount: document.getElementById("playlistCount"),
-  message: document.getElementById("message"),
+
+  newPlaylistBtn: document.getElementById("newPlaylistBtn"),
+  renamePlaylistBtn: document.getElementById("renamePlaylistBtn"),
+  deletePlaylistBtn: document.getElementById("deletePlaylistBtn"),
+  playlistSelect: document.getElementById("playlistSelect"),
+  playlistLibrary: document.getElementById("playlistLibrary"),
+
+  currentPlaylistName: document.getElementById("currentPlaylistName"),
+  currentPlaylistMeta: document.getElementById("currentPlaylistMeta"),
+
+  songCount: document.getElementById("songCount"),
+  songList: document.getElementById("songList"),
+
   nowPlayingTitle: document.getElementById("nowPlayingTitle"),
   nowPlayingMeta: document.getElementById("nowPlayingMeta"),
   playerPlaceholder: document.getElementById("playerPlaceholder"),
+  message: document.getElementById("message"),
 };
 
-let playlist = loadPlaylist();
+bootstrap();
 
-function savePlaylist() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(playlist));
+async function bootstrap() {
+  bindEvents();
+  await ensureLibrary();
+  await refreshLibrary();
 }
 
-function loadPlaylist() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    console.error("Load playlist error:", error);
-    return [];
+function getLibraryId() {
+  return localStorage.getItem(LIBRARY_ID_KEY);
+}
+
+function setLibraryId(id) {
+  localStorage.setItem(LIBRARY_ID_KEY, id);
+}
+
+async function ensureLibrary() {
+  let libraryId = getLibraryId();
+  if (libraryId) return libraryId;
+
+  const res = await api("/api/library/init", {
+    method: "POST",
+  });
+
+  setLibraryId(res.libraryId);
+  return res.libraryId;
+}
+
+async function refreshLibrary() {
+  const libraryId = getLibraryId();
+  appData = await api(`/api/library/${libraryId}`);
+  if (!getCurrentPlaylist()) currentSongIndex = -1;
+  renderAll();
+}
+
+async function api(path, options = {}) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
+    ...options,
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    throw new Error(data?.error || "Request failed");
   }
+
+  return data;
+}
+
+function getCurrentPlaylist() {
+  return appData?.playlists?.find((p) => p.id === appData.currentPlaylistId) || null;
+}
+
+function getCurrentSongs() {
+  return getCurrentPlaylist()?.songs || [];
 }
 
 function showMessage(text, type = "") {
@@ -42,12 +97,12 @@ function showMessage(text, type = "") {
   els.message.className = "message";
   if (type) els.message.classList.add(type);
 
+  clearTimeout(showMessage._timer);
   if (text) {
-    clearTimeout(showMessage._timer);
     showMessage._timer = setTimeout(() => {
       els.message.textContent = "";
       els.message.className = "message";
-    }, 2500);
+    }, 2600);
   }
 }
 
@@ -64,222 +119,185 @@ function escapeHtml(str) {
   });
 }
 
-function extractVideoId(url) {
-  if (!url || typeof url !== "string") return null;
+function formatCount(n, unit) {
+  return `${n} ${unit}`;
+}
 
-  const trimmed = url.trim();
-
-  const patterns = [
-    /(?:youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/,
-    /(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/,
-    /(?:youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
-    /(?:youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
-    /(?:youtube\.com\/live\/)([a-zA-Z0-9_-]{11})/,
-  ];
-
-  for (const pattern of patterns) {
-    const match = trimmed.match(pattern);
-    if (match && match[1]) return match[1];
-  }
+async function createPlaylist() {
+  const name = prompt("Nhập tên playlist mới:");
+  if (!name || !name.trim()) return;
 
   try {
-    const u = new URL(trimmed);
-    const v = u.searchParams.get("v");
-    if (v && /^[a-zA-Z0-9_-]{11}$/.test(v)) return v;
-  } catch (_) {
-    // ignore
-  }
-
-  if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) {
-    return trimmed;
-  }
-
-  return null;
-}
-
-function getThumb(videoId) {
-  return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
-}
-
-function getItemTitle(item, index) {
-  return item.title || `YouTube Video #${index + 1}`;
-}
-
-function updateNowPlaying() {
-  if (currentIndex < 0 || !playlist[currentIndex]) {
-    els.nowPlayingTitle.textContent = "Chưa có bài nào";
-    els.nowPlayingMeta.textContent = "Playlist của bạn sẽ xuất hiện ở đây";
-    els.playerPlaceholder.classList.remove("hidden");
-    return;
-  }
-
-  const item = playlist[currentIndex];
-  els.nowPlayingTitle.textContent = getItemTitle(item, currentIndex);
-  els.nowPlayingMeta.textContent = `Video ID: ${item.videoId}`;
-  els.playerPlaceholder.classList.add("hidden");
-}
-
-function updatePlaylistCount() {
-  els.playlistCount.textContent = `${playlist.length} bài`;
-}
-
-function renderPlaylist() {
-  updatePlaylistCount();
-
-  if (!playlist.length) {
-    els.playlist.innerHTML = `
-      <div class="empty">
-        Playlist đang trống.<br />
-        Hãy dán link YouTube để thêm bài đầu tiên.
-      </div>
-    `;
-    updateNowPlaying();
-    return;
-  }
-
-  els.playlist.innerHTML = playlist
-    .map((item, index) => {
-      const title = escapeHtml(getItemTitle(item, index));
-      const videoId = escapeHtml(item.videoId);
-      const activeClass = index === currentIndex ? "active" : "";
-
-      return `
-        <div class="playlist-item ${activeClass}">
-          <img class="thumb" src="${getThumb(videoId)}" alt="${title}" />
-          <div class="item-body">
-            <p class="item-title">${title}</p>
-            <p class="item-sub">${videoId}</p>
-          </div>
-          <div class="item-actions">
-            <button class="ghost" data-action="play" data-index="${index}">Play</button>
-            <button class="danger" data-action="remove" data-index="${index}">Remove</button>
-          </div>
-        </div>
-      `;
-    })
-    .join("");
-
-  updateNowPlaying();
-}
-
-function addVideo() {
-  const inputValue = els.youtubeUrl.value.trim();
-  const videoId = extractVideoId(inputValue);
-
-  if (!videoId) {
-    showMessage("Link YouTube không hợp lệ.", "error");
-    return;
-  }
-
-  const exists = playlist.some((item) => item.videoId === videoId);
-  if (exists) {
-    showMessage("Bài này đã có trong playlist.", "error");
-    return;
-  }
-
-  const item = {
-    videoId,
-    title: `YouTube Video ${playlist.length + 1}`,
-    addedAt: Date.now(),
-  };
-
-  playlist.push(item);
-  savePlaylist();
-  renderPlaylist();
-
-  els.youtubeUrl.value = "";
-  showMessage("Đã thêm vào playlist.", "success");
-
-  if (currentIndex === -1) {
-    playIndex(0);
+    appData = await api(`/api/library/${getLibraryId()}/playlists`, {
+      method: "POST",
+      body: JSON.stringify({ name: name.trim() }),
+    });
+    currentSongIndex = -1;
+    renderAll();
+    showMessage("Đã tạo playlist mới.", "success");
+  } catch (err) {
+    showMessage(err.message, "error");
   }
 }
 
-function removeIndex(index) {
-  if (index < 0 || index >= playlist.length) return;
+async function renameCurrentPlaylist() {
+  const playlist = getCurrentPlaylist();
+  if (!playlist) return;
 
-  const wasCurrent = index === currentIndex;
-  playlist.splice(index, 1);
+  const name = prompt("Đổi tên playlist:", playlist.name);
+  if (!name || !name.trim()) return;
 
-  if (!playlist.length) {
-    currentIndex = -1;
-    if (player && isPlayerReady) {
-      player.stopVideo();
+  try {
+    appData = await api(`/api/library/${getLibraryId()}/playlists/${playlist.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name: name.trim() }),
+    });
+    renderAll();
+    showMessage("Đã đổi tên playlist.", "success");
+  } catch (err) {
+    showMessage(err.message, "error");
+  }
+}
+
+async function deleteCurrentPlaylist() {
+  const playlist = getCurrentPlaylist();
+  if (!playlist) return;
+  if (!confirm(`Xoá playlist "${playlist.name}"?`)) return;
+
+  try {
+    appData = await api(`/api/library/${getLibraryId()}/playlists/${playlist.id}`, {
+      method: "DELETE",
+    });
+    currentSongIndex = -1;
+    if (player && isPlayerReady) player.stopVideo();
+    renderAll();
+    showMessage("Đã xoá playlist.", "success");
+  } catch (err) {
+    showMessage(err.message, "error");
+  }
+}
+
+async function switchPlaylist(playlistId) {
+  try {
+    appData = await api(`/api/library/${getLibraryId()}/select/${playlistId}`, {
+      method: "POST",
+    });
+    currentSongIndex = -1;
+    if (player && isPlayerReady) player.stopVideo();
+    renderAll();
+    showMessage("Đã chuyển playlist.", "success");
+  } catch (err) {
+    showMessage(err.message, "error");
+  }
+}
+
+async function addSong() {
+  const playlist = getCurrentPlaylist();
+  if (!playlist) return;
+
+  const raw = els.youtubeUrl.value.trim();
+  if (!raw) return;
+
+  try {
+    appData = await api(`/api/library/${getLibraryId()}/playlists/${playlist.id}/songs`, {
+      method: "POST",
+      body: JSON.stringify({ url: raw }),
+    });
+
+    els.youtubeUrl.value = "";
+    renderAll();
+    showMessage("Đã thêm bài.", "success");
+
+    if (currentSongIndex === -1) {
+      playSongAt(0);
     }
-  } else if (wasCurrent) {
-    if (index >= playlist.length) {
-      currentIndex = playlist.length - 1;
-    } else {
-      currentIndex = index;
+  } catch (err) {
+    showMessage(err.message, "error");
+  }
+}
+
+async function removeSong(songId) {
+  const playlist = getCurrentPlaylist();
+  if (!playlist) return;
+
+  const songs = getCurrentSongs();
+  const removedIndex = songs.findIndex((s) => s.id === songId);
+
+  try {
+    appData = await api(`/api/library/${getLibraryId()}/playlists/${playlist.id}/songs/${songId}`, {
+      method: "DELETE",
+    });
+
+    const nextSongs = getCurrentSongs();
+
+    if (!nextSongs.length) {
+      currentSongIndex = -1;
+      if (player && isPlayerReady) player.stopVideo();
+    } else if (removedIndex === currentSongIndex) {
+      currentSongIndex = Math.min(removedIndex, nextSongs.length - 1);
+      if (player && isPlayerReady && currentSongIndex >= 0) {
+        player.loadVideoById(nextSongs[currentSongIndex].videoId);
+      }
+    } else if (removedIndex < currentSongIndex) {
+      currentSongIndex -= 1;
     }
 
-    if (player && isPlayerReady && currentIndex >= 0) {
-      player.loadVideoById(playlist[currentIndex].videoId);
-    }
-  } else if (index < currentIndex) {
-    currentIndex -= 1;
+    renderAll();
+    showMessage("Đã xoá bài.", "success");
+  } catch (err) {
+    showMessage(err.message, "error");
   }
-
-  savePlaylist();
-  renderPlaylist();
-  showMessage("Đã xoá bài khỏi playlist.", "success");
 }
 
-function clearPlaylist() {
-  playlist = [];
-  currentIndex = -1;
-  savePlaylist();
-  renderPlaylist();
+function playSongAt(index) {
+  const songs = getCurrentSongs();
+  if (index < 0 || index >= songs.length) return;
+
+  currentSongIndex = index;
+  renderSongList();
+  renderNowPlaying();
 
   if (player && isPlayerReady) {
-    player.stopVideo();
+    player.loadVideoById(songs[index].videoId);
   }
-
-  showMessage("Đã xoá toàn bộ playlist.", "success");
-}
-
-function playIndex(index) {
-  if (index < 0 || index >= playlist.length) return;
-
-  currentIndex = index;
-  renderPlaylist();
-
-  if (!player || !isPlayerReady) {
-    return;
-  }
-
-  player.loadVideoById(playlist[index].videoId);
 }
 
 function playNext() {
-  if (!playlist.length) return;
+  const songs = getCurrentSongs();
+  if (!songs.length) return;
 
-  if (currentIndex < 0) {
-    playIndex(0);
+  if (currentSongIndex < 0) {
+    playSongAt(0);
     return;
   }
 
-  const nextIndex = (currentIndex + 1) % playlist.length;
-  playIndex(nextIndex);
+  const nextIndex = (currentSongIndex + 1) % songs.length;
+  playSongAt(nextIndex);
 }
 
 function playPrev() {
-  if (!playlist.length) return;
+  const songs = getCurrentSongs();
+  if (!songs.length) return;
 
-  if (currentIndex < 0) {
-    playIndex(0);
+  if (currentSongIndex < 0) {
+    playSongAt(0);
     return;
   }
 
-  const prevIndex = (currentIndex - 1 + playlist.length) % playlist.length;
-  playIndex(prevIndex);
+  const prevIndex = (currentSongIndex - 1 + songs.length) % songs.length;
+  playSongAt(prevIndex);
 }
 
 function togglePlayPause() {
-  if (!player || !isPlayerReady || currentIndex < 0) return;
+  const songs = getCurrentSongs();
+  if (!songs.length || !player || !isPlayerReady) return;
+
+  if (currentSongIndex < 0) {
+    playSongAt(0);
+    return;
+  }
 
   const state = player.getPlayerState();
-
   if (state === YT.PlayerState.PLAYING) {
     player.pauseVideo();
   } else {
@@ -287,36 +305,139 @@ function togglePlayPause() {
   }
 }
 
-function handlePlaylistClick(event) {
-  const button = event.target.closest("button[data-action]");
-  if (!button) return;
+function renderPlaylistSelect() {
+  const current = getCurrentPlaylist();
+  els.playlistSelect.innerHTML = appData.playlists
+    .map((p) => {
+      const selected = p.id === current?.id ? "selected" : "";
+      return `<option value="${p.id}" ${selected}>${escapeHtml(p.name)}</option>`;
+    })
+    .join("");
+}
 
-  const action = button.dataset.action;
-  const index = Number(button.dataset.index);
+function renderPlaylistLibrary() {
+  const current = getCurrentPlaylist();
 
-  if (Number.isNaN(index)) return;
+  els.playlistLibrary.innerHTML = appData.playlists
+    .map((p) => {
+      const active = p.id === current?.id ? "active" : "";
+      return `
+        <div class="saved-item ${active}" data-playlist-id="${p.id}">
+          <p class="saved-item-title">${escapeHtml(p.name)}</p>
+          <p class="saved-item-sub">${p.songs.length} bài</p>
+        </div>
+      `;
+    })
+    .join("");
+}
 
-  if (action === "play") {
-    playIndex(index);
-  } else if (action === "remove") {
-    removeIndex(index);
+function renderPlaylistMeta() {
+  const playlist = getCurrentPlaylist();
+  if (!playlist) {
+    els.currentPlaylistName.textContent = "Chưa có playlist";
+    els.currentPlaylistMeta.textContent = "0 bài";
+    return;
+  }
+
+  els.currentPlaylistName.textContent = playlist.name;
+  els.currentPlaylistMeta.textContent = formatCount(playlist.songs.length, "bài");
+}
+
+function renderSongList() {
+  const songs = getCurrentSongs();
+  els.songCount.textContent = formatCount(songs.length, "bài");
+
+  if (!songs.length) {
+    els.songList.innerHTML = `
+      <div class="empty-box">
+        Playlist đang trống.<br />
+        Hãy dán link YouTube để thêm bài đầu tiên.
+      </div>
+    `;
+    return;
+  }
+
+  els.songList.innerHTML = songs
+    .map((song, index) => {
+      const active = index === currentSongIndex ? "active" : "";
+      return `
+        <div class="song-item ${active}">
+          <img class="song-thumb" src="${escapeHtml(song.thumbnail)}" alt="${escapeHtml(song.title)}" />
+          <div class="song-body">
+            <p class="song-title">${escapeHtml(song.title)}</p>
+            <p class="song-sub">${escapeHtml(song.videoId)}</p>
+          </div>
+          <div class="song-actions">
+            <button class="btn-ghost" data-action="play-song" data-index="${index}">Play</button>
+            <button class="btn-danger" data-action="remove-song" data-song-id="${song.id}">Remove</button>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function renderNowPlaying() {
+  const songs = getCurrentSongs();
+
+  if (currentSongIndex < 0 || !songs[currentSongIndex]) {
+    els.nowPlayingTitle.textContent = "Chưa có bài nào";
+    els.nowPlayingMeta.textContent = "Thông tin bài đang phát sẽ hiện ở đây";
+    els.playerPlaceholder.classList.remove("hidden");
+    return;
+  }
+
+  const song = songs[currentSongIndex];
+  els.nowPlayingTitle.textContent = song.title;
+  els.nowPlayingMeta.textContent = `Video ID: ${song.videoId}`;
+  els.playerPlaceholder.classList.add("hidden");
+}
+
+function renderAll() {
+  renderPlaylistSelect();
+  renderPlaylistLibrary();
+  renderPlaylistMeta();
+  renderSongList();
+  renderNowPlaying();
+}
+
+function handleSongListClick(event) {
+  const playBtn = event.target.closest("[data-action='play-song']");
+  if (playBtn) {
+    const index = Number(playBtn.dataset.index);
+    if (!Number.isNaN(index)) playSongAt(index);
+    return;
+  }
+
+  const removeBtn = event.target.closest("[data-action='remove-song']");
+  if (removeBtn) {
+    removeSong(removeBtn.dataset.songId);
   }
 }
 
+function handlePlaylistLibraryClick(event) {
+  const item = event.target.closest("[data-playlist-id]");
+  if (!item) return;
+  switchPlaylist(item.dataset.playlistId);
+}
+
 function bindEvents() {
-  els.addBtn.addEventListener("click", addVideo);
-
-  els.youtubeUrl.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      addVideo();
-    }
-  });
-
+  els.addBtn.addEventListener("click", addSong);
   els.prevBtn.addEventListener("click", playPrev);
   els.nextBtn.addEventListener("click", playNext);
   els.playPauseBtn.addEventListener("click", togglePlayPause);
-  els.clearBtn.addEventListener("click", clearPlaylist);
-  els.playlist.addEventListener("click", handlePlaylistClick);
+
+  els.newPlaylistBtn.addEventListener("click", createPlaylist);
+  els.renamePlaylistBtn.addEventListener("click", renameCurrentPlaylist);
+  els.deletePlaylistBtn.addEventListener("click", deleteCurrentPlaylist);
+
+  els.playlistSelect.addEventListener("change", (e) => switchPlaylist(e.target.value));
+  els.playlistLibrary.addEventListener("click", handlePlaylistLibraryClick);
+  els.songList.addEventListener("click", handleSongListClick);
+
+  els.youtubeUrl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") addSong();
+  });
 }
 
 window.onYouTubeIframeAPIReady = function () {
@@ -333,11 +454,6 @@ window.onYouTubeIframeAPIReady = function () {
     events: {
       onReady: () => {
         isPlayerReady = true;
-
-        if (playlist.length > 0) {
-          currentIndex = 0;
-          renderPlaylist();
-        }
       },
       onStateChange: (event) => {
         if (event.data === YT.PlayerState.ENDED) {
@@ -350,6 +466,3 @@ window.onYouTubeIframeAPIReady = function () {
     },
   });
 };
-
-bindEvents();
-renderPlaylist();
