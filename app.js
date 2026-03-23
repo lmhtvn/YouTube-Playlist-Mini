@@ -1,4 +1,4 @@
-const API_BASE = "https://seedance-v2-0.workers.dev";
+const API_BASE = "https://nhac.seedance-v2-0.workers.dev";
 const LIBRARY_ID_KEY = "listen-mini-library-id";
 
 let appData = null;
