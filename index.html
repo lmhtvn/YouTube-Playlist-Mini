@@ -4,63 +4,58 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Listen Mini</title>
-  <meta name="description" content="Nghe nhạc YouTube và lưu playlist cá nhân." />
+  <meta name="description" content="Nghe nhạc YouTube với session playlist lưu trên Cloudflare KV." />
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
   <div class="app-shell">
     <main class="app">
-      <section class="card top-section">
+      <section class="card">
         <div class="topbar">
           <div class="brand">
             <div class="brand-dot"></div>
             <span>Listen Mini</span>
           </div>
-
-          <div class="playlist-actions-inline">
-            <button id="newPlaylistBtn" class="icon-btn" title="Tạo playlist mới">＋</button>
-          </div>
         </div>
 
-        <div class="playlist-row">
-          <select id="playlistSelect"></select>
+        <div class="session-create">
+          <input id="sessionSlugInput" type="text" placeholder="Tên session, ví dụ: chill-night" />
+          <button id="createSessionBtn" class="btn btn-primary">Tạo</button>
         </div>
 
-        <div class="playlist-tools">
-          <button id="renamePlaylistBtn" class="btn btn-secondary">Đổi tên</button>
-          <button id="deletePlaylistBtn" class="btn btn-danger">Xoá</button>
+        <div class="session-open">
+          <input id="openSessionInput" type="text" placeholder="Nhập session slug để mở..." />
+          <button id="openSessionBtn" class="btn btn-secondary">Mở</button>
         </div>
 
-        <div class="meta-box compact">
-          <div>
-            <p class="meta-kicker">Playlist hiện tại</p>
-            <h2 id="currentPlaylistName">...</h2>
-            <p id="currentPlaylistMeta" class="meta-sub">0 bài</p>
-          </div>
+        <p id="message" class="message"></p>
+
+        <div class="meta-box">
+          <p class="meta-kicker">Session hiện tại</p>
+          <h2 id="sessionName">Chưa có session</h2>
+          <p id="sessionSlug" class="meta-sub">Hãy tạo hoặc mở một session</p>
+        </div>
+
+        <div class="session-tools">
+          <button id="renameSessionBtn" class="btn btn-secondary">Đổi tên</button>
+          <button id="copyLinkBtn" class="btn btn-secondary">Copy link</button>
+          <button id="deleteSessionBtn" class="btn btn-danger">Xoá session</button>
         </div>
       </section>
 
       <section class="card">
         <div class="add-song">
-          <input
-            id="youtubeUrl"
-            type="text"
-            placeholder="Dán link YouTube hoặc video ID..."
-            autocomplete="off"
-          />
+          <input id="youtubeUrl" type="text" placeholder="Dán link YouTube hoặc video ID..." autocomplete="off" />
           <button id="addBtn" class="btn btn-primary">Thêm</button>
         </div>
 
-        <p id="message" class="message"></p>
-
         <div class="player-frame">
           <div id="player"></div>
-
           <div id="playerPlaceholder" class="player-placeholder">
             <div class="placeholder-inner">
               <div class="placeholder-disc">▶</div>
               <h3>Chưa có bài nào</h3>
-              <p>Dán link YouTube để bắt đầu</p>
+              <p>Thêm bài vào session để bắt đầu</p>
             </div>
           </div>
         </div>
@@ -68,7 +63,7 @@
         <div class="now-playing">
           <p class="meta-kicker">Đang phát</p>
           <h2 id="nowPlayingTitle">Chưa có bài nào</h2>
-          <p id="nowPlayingMeta" class="meta-sub">Thông tin bài đang phát sẽ hiện ở đây</p>
+          <p id="nowPlayingMeta" class="meta-sub">Thông tin bài sẽ hiện ở đây</p>
 
           <div class="controls">
             <button id="prevBtn" class="btn btn-secondary">⏮</button>
@@ -78,7 +73,7 @@
         </div>
       </section>
 
-      <section class="card songs-card">
+      <section class="card">
         <div class="section-head">
           <div>
             <p class="meta-kicker">Danh sách bài</p>
@@ -87,17 +82,6 @@
         </div>
 
         <div id="songList" class="song-list"></div>
-      </section>
-
-      <section class="card library-card">
-        <div class="section-head">
-          <div>
-            <p class="meta-kicker">Thư viện playlist</p>
-            <h2>Playlists</h2>
-          </div>
-        </div>
-
-        <div id="playlistLibrary" class="saved-list"></div>
       </section>
     </main>
   </div>
