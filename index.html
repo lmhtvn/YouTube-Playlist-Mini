@@ -3,85 +3,101 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Listen Mini V3</title>
-  <meta name="description" content="YouTube playlist mini dùng GitHub Pages + Cloudflare Worker KV" />
+  <title>Listen Mini</title>
+  <meta name="description" content="Nghe nhạc YouTube và lưu playlist cá nhân." />
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
   <div class="app-shell">
-    <header class="topbar">
-      <p class="eyebrow">GitHub Pages + Cloudflare Worker + KV</p>
-      <h1>Listen Mini V3</h1>
-      <p class="sub">Lưu playlist trên Cloudflare KV, lần sau mở lại chỉ cần chọn playlist.</p>
-    </header>
-
-    <main class="layout">
-      <aside class="sidebar card">
-        <div class="sidebar-head">
-          <div>
-            <p class="eyebrow small">Playlists</p>
-            <h2>Thư viện</h2>
+    <main class="app">
+      <section class="card top-section">
+        <div class="topbar">
+          <div class="brand">
+            <div class="brand-dot"></div>
+            <span>Listen Mini</span>
           </div>
-          <button id="newPlaylistBtn" class="btn-primary">+ New</button>
+
+          <div class="playlist-actions-inline">
+            <button id="newPlaylistBtn" class="icon-btn" title="Tạo playlist mới">＋</button>
+          </div>
         </div>
 
-        <select id="playlistSelect"></select>
+        <div class="playlist-row">
+          <select id="playlistSelect"></select>
+        </div>
 
         <div class="playlist-tools">
-          <button id="renamePlaylistBtn" class="btn-ghost">Đổi tên</button>
-          <button id="deletePlaylistBtn" class="btn-danger">Xoá</button>
+          <button id="renamePlaylistBtn" class="btn btn-secondary">Đổi tên</button>
+          <button id="deletePlaylistBtn" class="btn btn-danger">Xoá</button>
         </div>
 
-        <div class="meta-box">
-          <span class="meta-label">Playlist hiện tại</span>
-          <h3 id="currentPlaylistName">...</h3>
-          <p id="currentPlaylistMeta">0 bài</p>
+        <div class="meta-box compact">
+          <div>
+            <p class="meta-kicker">Playlist hiện tại</p>
+            <h2 id="currentPlaylistName">...</h2>
+            <p id="currentPlaylistMeta" class="meta-sub">0 bài</p>
+          </div>
         </div>
+      </section>
 
-        <div id="playlistLibrary" class="saved-list"></div>
-      </aside>
-
-      <section class="main card">
+      <section class="card">
         <div class="add-song">
-          <input id="youtubeUrl" type="text" placeholder="Dán link YouTube hoặc video ID..." />
-          <button id="addBtn" class="btn-primary">Add song</button>
+          <input
+            id="youtubeUrl"
+            type="text"
+            placeholder="Dán link YouTube hoặc video ID..."
+            autocomplete="off"
+          />
+          <button id="addBtn" class="btn btn-primary">Thêm</button>
         </div>
 
         <p id="message" class="message"></p>
 
-        <div class="player-panel">
-          <div class="player-frame">
-            <div id="player"></div>
-            <div id="playerPlaceholder" class="player-placeholder">
-              <div class="placeholder-inner">
-                <div class="placeholder-disc">▶</div>
-                <h3>Chưa có bài nào đang phát</h3>
-                <p>Hãy chọn playlist hoặc thêm bài mới.</p>
-              </div>
-            </div>
-          </div>
+        <div class="player-frame">
+          <div id="player"></div>
 
-          <div class="now-playing">
-            <span class="meta-label">Now playing</span>
-            <h2 id="nowPlayingTitle">Chưa có bài nào</h2>
-            <p id="nowPlayingMeta">Thông tin bài đang phát sẽ hiện ở đây</p>
-
-            <div class="controls">
-              <button id="prevBtn" class="btn-ghost">⏮ Prev</button>
-              <button id="playPauseBtn" class="btn-primary">⏯ Play / Pause</button>
-              <button id="nextBtn" class="btn-ghost">Next ⏭</button>
+          <div id="playerPlaceholder" class="player-placeholder">
+            <div class="placeholder-inner">
+              <div class="placeholder-disc">▶</div>
+              <h3>Chưa có bài nào</h3>
+              <p>Dán link YouTube để bắt đầu</p>
             </div>
           </div>
         </div>
 
-        <div class="songs-head">
+        <div class="now-playing">
+          <p class="meta-kicker">Đang phát</p>
+          <h2 id="nowPlayingTitle">Chưa có bài nào</h2>
+          <p id="nowPlayingMeta" class="meta-sub">Thông tin bài đang phát sẽ hiện ở đây</p>
+
+          <div class="controls">
+            <button id="prevBtn" class="btn btn-secondary">⏮</button>
+            <button id="playPauseBtn" class="btn btn-primary">⏯</button>
+            <button id="nextBtn" class="btn btn-secondary">⏭</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card songs-card">
+        <div class="section-head">
           <div>
-            <p class="eyebrow small">Songs</p>
+            <p class="meta-kicker">Danh sách bài</p>
             <h2 id="songCount">0 bài</h2>
           </div>
         </div>
 
         <div id="songList" class="song-list"></div>
+      </section>
+
+      <section class="card library-card">
+        <div class="section-head">
+          <div>
+            <p class="meta-kicker">Thư viện playlist</p>
+            <h2>Playlists</h2>
+          </div>
+        </div>
+
+        <div id="playlistLibrary" class="saved-list"></div>
       </section>
     </main>
   </div>
