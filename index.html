@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Listen Mini</title>
+  <meta name="description" content="Nghe nhạc YouTube bằng cách dán link, tạo playlist đơn giản." />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Cloudflare Pages • GitHub • YouTube</p>
+        <h1>Listen Mini</h1>
+        <p class="sub">
+          Dán link YouTube để nghe nhạc và tạo playlist cá nhân đơn giản.
+        </p>
+      </div>
+    </header>
+
+    <main class="grid">
+      <section class="card card-main">
+        <div class="input-wrap">
+          <input
+            id="youtubeUrl"
+            type="text"
+            placeholder="Dán link YouTube vào đây..."
+            autocomplete="off"
+          />
+          <button id="addBtn">Add</button>
+        </div>
+
+        <p id="message" class="message"></p>
+
+        <div class="player-shell">
+          <div id="player"></div>
+          <div id="playerPlaceholder" class="player-placeholder">
+            <div>
+              <div class="placeholder-icon">▶</div>
+              <p>Chưa có bài nào đang phát</p>
+              <span>Hãy dán link YouTube để bắt đầu</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="controls">
+          <button id="prevBtn" class="ghost">⏮ Prev</button>
+          <button id="playPauseBtn" class="primary">⏯ Play / Pause</button>
+          <button id="nextBtn" class="ghost">Next ⏭</button>
+        </div>
+
+        <div class="now-playing">
+          <span class="label">Đang phát</span>
+          <h2 id="nowPlayingTitle">Chưa có bài nào</h2>
+          <p id="nowPlayingMeta">Playlist của bạn sẽ xuất hiện ở đây</p>
+        </div>
+      </section>
+
+      <aside class="card card-side">
+        <div class="playlist-head">
+          <div>
+            <p class="eyebrow small">Playlist</p>
+            <h3 id="playlistCount">0 bài</h3>
+          </div>
+          <button id="clearBtn" class="danger">Clear all</button>
+        </div>
+
+        <div id="playlist" class="playlist"></div>
+      </aside>
+    </main>
+  </div>
+
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
