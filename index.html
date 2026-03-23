@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Listen Mini</title>
   <meta name="description" content="Nghe nhạc YouTube với session playlist lưu trên Cloudflare KV." />
+  <link rel="icon" href="data:," />
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
@@ -19,13 +20,23 @@
         </div>
 
         <div class="session-create">
-          <input id="sessionSlugInput" type="text" placeholder="Tên session, ví dụ: chill-night" />
-          <button id="createSessionBtn" class="btn btn-primary">Tạo</button>
+          <input
+            id="sessionSlugInput"
+            type="text"
+            placeholder="Tạo session mới, ví dụ: chill-night"
+            autocomplete="off"
+          />
+          <button id="createSessionBtn" class="btn btn-primary" type="button">Tạo</button>
         </div>
 
         <div class="session-open">
-          <input id="openSessionInput" type="text" placeholder="Nhập session slug để mở..." />
-          <button id="openSessionBtn" class="btn btn-secondary">Mở</button>
+          <input
+            id="openSessionInput"
+            type="text"
+            placeholder="Nhập session slug để mở..."
+            autocomplete="off"
+          />
+          <button id="openSessionBtn" class="btn btn-secondary" type="button">Mở</button>
         </div>
 
         <p id="message" class="message"></p>
@@ -33,24 +44,30 @@
         <div class="meta-box">
           <p class="meta-kicker">Session hiện tại</p>
           <h2 id="sessionName">Chưa có session</h2>
-          <p id="sessionSlug" class="meta-sub">Hãy tạo hoặc mở một session</p>
+          <p id="sessionSlug" class="meta-sub">Tạo mới hoặc mở bằng ?s=session-slug</p>
         </div>
 
         <div class="session-tools">
-          <button id="renameSessionBtn" class="btn btn-secondary">Đổi tên</button>
-          <button id="copyLinkBtn" class="btn btn-secondary">Copy link</button>
-          <button id="deleteSessionBtn" class="btn btn-danger">Xoá session</button>
+          <button id="renameSessionBtn" class="btn btn-secondary" type="button">Đổi tên</button>
+          <button id="copyLinkBtn" class="btn btn-secondary" type="button">Copy link</button>
+          <button id="deleteSessionBtn" class="btn btn-danger" type="button">Xoá session</button>
         </div>
       </section>
 
       <section class="card">
         <div class="add-song">
-          <input id="youtubeUrl" type="text" placeholder="Dán link YouTube hoặc video ID..." autocomplete="off" />
-          <button id="addBtn" class="btn btn-primary">Thêm</button>
+          <input
+            id="youtubeUrl"
+            type="text"
+            placeholder="Dán link YouTube hoặc video ID..."
+            autocomplete="off"
+          />
+          <button id="addBtn" class="btn btn-primary" type="button">Thêm</button>
         </div>
 
         <div class="player-frame">
           <div id="player"></div>
+
           <div id="playerPlaceholder" class="player-placeholder">
             <div class="placeholder-inner">
               <div class="placeholder-disc">▶</div>
@@ -66,9 +83,9 @@
           <p id="nowPlayingMeta" class="meta-sub">Thông tin bài sẽ hiện ở đây</p>
 
           <div class="controls">
-            <button id="prevBtn" class="btn btn-secondary">⏮</button>
-            <button id="playPauseBtn" class="btn btn-primary">⏯</button>
-            <button id="nextBtn" class="btn btn-secondary">⏭</button>
+            <button id="prevBtn" class="btn btn-secondary" type="button">⏮</button>
+            <button id="playPauseBtn" class="btn btn-primary" type="button">⏯</button>
+            <button id="nextBtn" class="btn btn-secondary" type="button">⏭</button>
           </div>
         </div>
       </section>
@@ -81,7 +98,12 @@
           </div>
         </div>
 
-        <div id="songList" class="song-list"></div>
+        <div id="songList" class="song-list">
+          <div class="empty-box">
+            Chưa có session nào đang mở.<br />
+            Hãy tạo session mới hoặc nhập slug để mở.
+          </div>
+        </div>
       </section>
     </main>
   </div>
