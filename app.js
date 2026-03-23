@@ -30,6 +30,7 @@ const els = {
   nowPlayingTitle: document.getElementById("nowPlayingTitle"),
   nowPlayingMeta: document.getElementById("nowPlayingMeta"),
   playerPlaceholder: document.getElementById("playerPlaceholder"),
+  playerRoot: document.getElementById("player"),
 
   message: document.getElementById("message"),
 };
@@ -50,17 +51,21 @@ async function bootstrap() {
 function getSessionSlugFromUrl() {
   const url = new URL(window.location.href);
   const slug = url.searchParams.get("s");
-  return slug ? slug.trim().toLowerCase() : "";
+  return slug ? sanitizeSlug(slug) : "";
 }
 
 function setSessionSlugToUrl(slug) {
   const url = new URL(window.location.href);
-  url.searchParams.set("s", slug);
+  if (slug) {
+    url.searchParams.set("s", slug);
+  } else {
+    url.searchParams.delete("s");
+  }
   window.history.replaceState({}, "", url.toString());
 }
 
 async function api(path, options = {}) {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const response = await fetch(`${API_BASE}${path}`, {
     headers: {
       "Content-Type": "application/json",
       ...(options.headers || {}),
@@ -68,9 +73,9 @@ async function api(path, options = {}) {
     ...options,
   });
 
-  const data = await res.json().catch(() => ({}));
+  const data = await response.json().catch(() => ({}));
 
-  if (!res.ok) {
+  if (!response.ok) {
     const msg = data?.detail
       ? `${data?.error || "Request failed"}: ${data.detail}`
       : (data?.error || "Request failed");
@@ -81,9 +86,13 @@ async function api(path, options = {}) {
 }
 
 function showMessage(text, type = "") {
-  els.message.textContent = text;
+  if (!els.message) return;
+
+  els.message.textContent = text || "";
   els.message.className = "message";
-  if (type) els.message.classList.add(type);
+  if (type) {
+    els.message.classList.add(type);
+  }
 
   clearTimeout(showMessage._timer);
   if (text) {
@@ -108,22 +117,24 @@ function escapeHtml(str) {
 }
 
 function sanitizeSlug(input) {
-  return String(input || "")
+  const slug = String(input || "")
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
+
+  return slug;
 }
 
 function getSongs() {
-  return appData?.songs || [];
+  return Array.isArray(appData?.songs) ? appData.songs : [];
 }
 
 function getCurrentSongIndex() {
   const songs = getSongs();
-  if (!songs.length) return -1;
-  return songs.findIndex((s) => s.id === appData?.nowPlayingSongId);
+  if (!songs.length || !appData?.nowPlayingSongId) return -1;
+  return songs.findIndex((song) => song.id === appData.nowPlayingSongId);
 }
 
 function syncCurrentSongIndexFromData() {
@@ -134,38 +145,48 @@ function renderEmptyState() {
   appData = null;
   currentSongIndex = -1;
 
-  els.sessionName.textContent = "Chưa có session";
-  els.sessionSlug.textContent = "Tạo mới hoặc mở bằng ?s=session-slug";
-  els.songCount.textContent = "0 bài";
-  els.nowPlayingTitle.textContent = "Chưa có bài nào";
-  els.nowPlayingMeta.textContent = "Thông tin bài sẽ hiện ở đây";
-  els.songList.innerHTML = `
-    <div class="empty-box">
-      Chưa có session nào đang mở.<br />
-      Hãy tạo session mới hoặc nhập slug để mở.
-    </div>
-  `;
-  els.playerPlaceholder.classList.remove("hidden");
+  if (els.sessionName) els.sessionName.textContent = "Chưa có session";
+  if (els.sessionSlug) els.sessionSlug.textContent = "Tạo mới hoặc mở bằng ?s=session-slug";
+  if (els.songCount) els.songCount.textContent = "0 bài";
+  if (els.nowPlayingTitle) els.nowPlayingTitle.textContent = "Chưa có bài nào";
+  if (els.nowPlayingMeta) els.nowPlayingMeta.textContent = "Thông tin bài sẽ hiện ở đây";
+  if (els.playerPlaceholder) els.playerPlaceholder.classList.remove("hidden");
+
+  if (els.songList) {
+    els.songList.innerHTML = `
+      <div class="empty-box">
+        Chưa có session nào đang mở.<br />
+        Hãy tạo session mới hoặc nhập slug để mở.
+      </div>
+    `;
+  }
 }
 
 async function loadSession(slug) {
   try {
     appData = await api(`/api/session/${slug}`);
     setSessionSlugToUrl(slug);
-    els.openSessionInput.value = slug;
+
+    if (els.openSessionInput) els.openSessionInput.value = slug;
+
     syncCurrentSongIndexFromData();
     renderAll();
-  } catch (err) {
+
+    const songs = getSongs();
+    if (isPlayerReady && currentSongIndex >= 0 && songs[currentSongIndex]) {
+      player.loadVideoById(songs[currentSongIndex].videoId);
+    }
+  } catch (error) {
     renderEmptyState();
-    showMessage(err.message, "error");
+    showMessage(error.message, "error");
   }
 }
 
 async function createSession() {
-  const rawSlug = els.sessionSlugInput.value.trim();
+  const rawSlug = els.sessionSlugInput?.value?.trim() || "";
   const slug = sanitizeSlug(rawSlug);
 
-  if (!slug) {
+  if (!slug || slug.length < 3) {
     showMessage("Slug không hợp lệ.", "error");
     return;
   }
@@ -181,22 +202,26 @@ async function createSession() {
 
     appData = data;
     setSessionSlugToUrl(slug);
-    els.openSessionInput.value = slug;
-    els.sessionSlugInput.value = "";
+
+    if (els.openSessionInput) els.openSessionInput.value = slug;
+    if (els.sessionSlugInput) els.sessionSlugInput.value = "";
+
     syncCurrentSongIndexFromData();
     renderAll();
     showMessage("Đã tạo session mới.", "success");
-  } catch (err) {
-    showMessage(err.message, "error");
+  } catch (error) {
+    showMessage(error.message, "error");
   }
 }
 
 async function openSession() {
-  const slug = sanitizeSlug(els.openSessionInput.value);
-  if (!slug) {
+  const slug = sanitizeSlug(els.openSessionInput?.value || "");
+
+  if (!slug || slug.length < 3) {
     showMessage("Session slug không hợp lệ.", "error");
     return;
   }
+
   await loadSession(slug);
 }
 
@@ -206,7 +231,7 @@ async function renameSession() {
     return;
   }
 
-  const name = prompt("Đổi tên session:", appData.name || appData.slug);
+  const name = window.prompt("Đổi tên session:", appData.name || appData.slug);
   if (!name || !name.trim()) return;
 
   try {
@@ -214,11 +239,12 @@ async function renameSession() {
       method: "PATCH",
       body: JSON.stringify({ name: name.trim() }),
     });
+
     syncCurrentSongIndexFromData();
     renderAll();
     showMessage("Đã đổi tên session.", "success");
-  } catch (err) {
-    showMessage(err.message, "error");
+  } catch (error) {
+    showMessage(error.message, "error");
   }
 }
 
@@ -228,16 +254,18 @@ async function deleteSession() {
     return;
   }
 
-  if (!confirm(`Xoá session "${appData.slug}"?`)) return;
+  const ok = window.confirm(`Xoá session "${appData.slug}"?`);
+  if (!ok) return;
 
   try {
     await api(`/api/session/${appData.slug}`, {
       method: "DELETE",
     });
 
-    const url = new URL(window.location.href);
-    url.searchParams.delete("s");
-    window.history.replaceState({}, "", url.toString());
+    setSessionSlugToUrl("");
+
+    if (els.openSessionInput) els.openSessionInput.value = "";
+    if (els.sessionSlugInput) els.sessionSlugInput.value = "";
 
     if (player && isPlayerReady) {
       player.stopVideo();
@@ -245,8 +273,8 @@ async function deleteSession() {
 
     renderEmptyState();
     showMessage("Đã xoá session.", "success");
-  } catch (err) {
-    showMessage(err.message, "error");
+  } catch (error) {
+    showMessage(error.message, "error");
   }
 }
 
@@ -262,7 +290,7 @@ async function copySessionLink() {
   try {
     await navigator.clipboard.writeText(url.toString());
     showMessage("Đã copy link session.", "success");
-  } catch {
+  } catch (error) {
     showMessage("Không thể copy link.", "error");
   }
 }
@@ -273,7 +301,7 @@ async function addSong() {
     return;
   }
 
-  const raw = els.youtubeUrl.value.trim();
+  const raw = els.youtubeUrl?.value?.trim() || "";
   if (!raw) return;
 
   try {
@@ -282,20 +310,18 @@ async function addSong() {
       body: JSON.stringify({ url: raw }),
     });
 
-    els.youtubeUrl.value = "";
+    if (els.youtubeUrl) els.youtubeUrl.value = "";
+
     syncCurrentSongIndexFromData();
     renderAll();
     showMessage("Đã thêm bài.", "success");
 
-    if (currentSongIndex >= 0) {
-      const songs = getSongs();
-      const song = songs[currentSongIndex];
-      if (song && player && isPlayerReady) {
-        player.loadVideoById(song.videoId);
-      }
+    const songs = getSongs();
+    if (isPlayerReady && currentSongIndex >= 0 && songs[currentSongIndex]) {
+      player.loadVideoById(songs[currentSongIndex].videoId);
     }
-  } catch (err) {
-    showMessage(err.message, "error");
+  } catch (error) {
+    showMessage(error.message, "error");
   }
 }
 
@@ -313,19 +339,19 @@ async function removeSong(songId) {
     const songs = getSongs();
     if (!songs.length) {
       if (player && isPlayerReady) player.stopVideo();
-    } else if (currentSongIndex >= 0 && player && isPlayerReady) {
+    } else if (player && isPlayerReady && currentSongIndex >= 0 && songs[currentSongIndex]) {
       player.loadVideoById(songs[currentSongIndex].videoId);
     }
 
     showMessage("Đã xoá bài.", "success");
-  } catch (err) {
-    showMessage(err.message, "error");
+  } catch (error) {
+    showMessage(error.message, "error");
   }
 }
 
 async function setNowPlayingByIndex(index) {
   const songs = getSongs();
-  if (index < 0 || index >= songs.length) return;
+  if (!appData?.slug || index < 0 || index >= songs.length) return;
 
   try {
     appData = await api(`/api/session/${appData.slug}/now-playing`, {
@@ -336,11 +362,12 @@ async function setNowPlayingByIndex(index) {
     syncCurrentSongIndexFromData();
     renderAll();
 
-    if (player && isPlayerReady) {
-      player.loadVideoById(songs[index].videoId);
+    const refreshedSongs = getSongs();
+    if (player && isPlayerReady && currentSongIndex >= 0 && refreshedSongs[currentSongIndex]) {
+      player.loadVideoById(refreshedSongs[currentSongIndex].videoId);
     }
-  } catch (err) {
-    showMessage(err.message, "error");
+  } catch (error) {
+    showMessage(error.message, "error");
   }
 }
 
@@ -389,34 +416,44 @@ function togglePlayPause() {
 
 function renderSessionMeta() {
   if (!appData) {
-    els.sessionName.textContent = "Chưa có session";
-    els.sessionSlug.textContent = "Hãy tạo hoặc mở một session";
+    if (els.sessionName) els.sessionName.textContent = "Chưa có session";
+    if (els.sessionSlug) els.sessionSlug.textContent = "Hãy tạo hoặc mở một session";
     return;
   }
 
-  els.sessionName.textContent = appData.name || appData.slug;
-  els.sessionSlug.textContent = `?s=${appData.slug} • ${getSongs().length} bài`;
+  if (els.sessionName) {
+    els.sessionName.textContent = appData.name || appData.slug;
+  }
+
+  if (els.sessionSlug) {
+    els.sessionSlug.textContent = `?s=${appData.slug} • ${getSongs().length} bài`;
+  }
 }
 
 function renderNowPlaying() {
   const songs = getSongs();
 
   if (currentSongIndex < 0 || !songs[currentSongIndex]) {
-    els.nowPlayingTitle.textContent = "Chưa có bài nào";
-    els.nowPlayingMeta.textContent = "Thông tin bài sẽ hiện ở đây";
-    els.playerPlaceholder.classList.remove("hidden");
+    if (els.nowPlayingTitle) els.nowPlayingTitle.textContent = "Chưa có bài nào";
+    if (els.nowPlayingMeta) els.nowPlayingMeta.textContent = "Thông tin bài sẽ hiện ở đây";
+    if (els.playerPlaceholder) els.playerPlaceholder.classList.remove("hidden");
     return;
   }
 
   const song = songs[currentSongIndex];
-  els.nowPlayingTitle.textContent = song.title;
-  els.nowPlayingMeta.textContent = `Video ID: ${song.videoId}`;
-  els.playerPlaceholder.classList.add("hidden");
+  if (els.nowPlayingTitle) els.nowPlayingTitle.textContent = song.title;
+  if (els.nowPlayingMeta) els.nowPlayingMeta.textContent = `Video ID: ${song.videoId}`;
+  if (els.playerPlaceholder) els.playerPlaceholder.classList.add("hidden");
 }
 
 function renderSongList() {
   const songs = getSongs();
-  els.songCount.textContent = `${songs.length} bài`;
+
+  if (els.songCount) {
+    els.songCount.textContent = `${songs.length} bài`;
+  }
+
+  if (!els.songList) return;
 
   if (!songs.length) {
     els.songList.innerHTML = `
@@ -433,13 +470,18 @@ function renderSongList() {
 
     return `
       <div class="song-item ${active}">
-        <img class="song-thumb" src="${escapeHtml(song.thumbnail)}" alt="${escapeHtml(song.title)}" />
+        <img
+          class="song-thumb"
+          src="${escapeHtml(song.thumbnail)}"
+          alt="${escapeHtml(song.title)}"
+          loading="lazy"
+        />
         <div class="song-body">
           <p class="song-title">${escapeHtml(song.title)}</p>
           <p class="song-sub">${escapeHtml(song.videoId)}</p>
           <div class="song-actions">
-            <button class="btn btn-secondary" data-action="play-song" data-index="${index}">Play</button>
-            <button class="btn btn-danger" data-action="remove-song" data-song-id="${song.id}">Remove</button>
+            <button class="btn btn-secondary" data-action="play-song" data-index="${index}" type="button">Play</button>
+            <button class="btn btn-danger" data-action="remove-song" data-song-id="${song.id}" type="button">Remove</button>
           </div>
         </div>
       </div>
@@ -470,33 +512,68 @@ function handleSongListClick(event) {
 }
 
 function bindEvents() {
-  els.createSessionBtn.addEventListener("click", createSession);
-  els.openSessionBtn.addEventListener("click", openSession);
-  els.renameSessionBtn.addEventListener("click", renameSession);
-  els.copyLinkBtn.addEventListener("click", copySessionLink);
-  els.deleteSessionBtn.addEventListener("click", deleteSession);
+  if (els.createSessionBtn) {
+    els.createSessionBtn.addEventListener("click", createSession);
+  }
 
-  els.addBtn.addEventListener("click", addSong);
-  els.prevBtn.addEventListener("click", playPrev);
-  els.playPauseBtn.addEventListener("click", togglePlayPause);
-  els.nextBtn.addEventListener("click", playNext);
+  if (els.openSessionBtn) {
+    els.openSessionBtn.addEventListener("click", openSession);
+  }
 
-  els.songList.addEventListener("click", handleSongListClick);
+  if (els.renameSessionBtn) {
+    els.renameSessionBtn.addEventListener("click", renameSession);
+  }
 
-  els.sessionSlugInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") createSession();
-  });
+  if (els.copyLinkBtn) {
+    els.copyLinkBtn.addEventListener("click", copySessionLink);
+  }
 
-  els.openSessionInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") openSession();
-  });
+  if (els.deleteSessionBtn) {
+    els.deleteSessionBtn.addEventListener("click", deleteSession);
+  }
 
-  els.youtubeUrl.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") addSong();
-  });
+  if (els.addBtn) {
+    els.addBtn.addEventListener("click", addSong);
+  }
+
+  if (els.prevBtn) {
+    els.prevBtn.addEventListener("click", playPrev);
+  }
+
+  if (els.playPauseBtn) {
+    els.playPauseBtn.addEventListener("click", togglePlayPause);
+  }
+
+  if (els.nextBtn) {
+    els.nextBtn.addEventListener("click", playNext);
+  }
+
+  if (els.songList) {
+    els.songList.addEventListener("click", handleSongListClick);
+  }
+
+  if (els.sessionSlugInput) {
+    els.sessionSlugInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") createSession();
+    });
+  }
+
+  if (els.openSessionInput) {
+    els.openSessionInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") openSession();
+    });
+  }
+
+  if (els.youtubeUrl) {
+    els.youtubeUrl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") addSong();
+    });
+  }
 }
 
 window.onYouTubeIframeAPIReady = function () {
+  if (!els.playerRoot) return;
+
   player = new YT.Player("player", {
     height: "100%",
     width: "100%",
